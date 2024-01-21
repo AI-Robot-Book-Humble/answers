@@ -1,6 +1,7 @@
 import rclpy
 from rclpy.node import Node
 from rclpy.duration import Duration
+from rclpy.parameter import Parameter
 from rclpy.action import ActionClient
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 from control_msgs.action import FollowJointTrajectory
@@ -16,7 +17,7 @@ from crane_plus_commander.kinematics import (
     from_gripper_ratio, gripper_in_range, inverse_kinematics, joint_in_range)
 
 
-# CRANE+用のアクションへリクエストを送り，他からサービスを受け付けるノード
+# CRANE+ V2用のアクションへリクエストを送り，他からサービスを受け付けるノード
 class Commander(Node):
 
     def __init__(self, timer=False):
@@ -50,6 +51,10 @@ class Commander(Node):
         self._tf_buffer = Buffer()
         self._tf_listener = TransformListener(
             self._tf_buffer, self, spin_thread=True)
+        # /clockトピックのパブリッシャが存在すればuse_sim_timeをTrueにする
+        if self.get_publishers_info_by_topic('/clock') != []:
+            self.set_parameters([Parameter('use_sim_time', Parameter.Type.BOOL, True)])
+            self.get_logger().info('/clockパブリッシャ検出，use_sim_time: True')
 
     def command_callback(self, request, response):
         self.get_logger().info(f'command: {request.command}')
@@ -211,7 +216,7 @@ def main():
     commander.send_goal_gripper(from_gripper_ratio(1), 1)
     print('サービスサーバ待機')
 
-    # Ctrl+cでエラーにならないようにKeyboardInterruptを捕まえる
+    # Ctrl+CでエラーにならないようにKeyboardInterruptを捕まえる
     try:
         executor = MultiThreadedExecutor()
         rclpy.spin(commander, executor)
@@ -223,5 +228,5 @@ def main():
     commander.send_goal_joint(commander.poses['zeros'], 5)
     commander.send_goal_gripper(from_gripper_ratio(0), 1)
 
-    rclpy.shutdown()
+    rclpy.try_shutdown()
     print('終了')

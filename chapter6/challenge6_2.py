@@ -1,6 +1,7 @@
 import rclpy
 from rclpy.node import Node
 from rclpy.duration import Duration
+from rclpy.parameter import Parameter
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 import time
 import threading
@@ -10,7 +11,7 @@ from crane_plus_commander.kinematics6_2 import (
     inverse_kinematics, joint_in_range, to_gripper_ratio, collides_with_table)
 
 
-# CRANE+用のトピックへ指令をパブリッシュするノード
+# CRANE+ V2用のトピックへ指令をパブリッシュするノード
 class Commander(Node):
 
     def __init__(self):
@@ -26,6 +27,10 @@ class Commander(Node):
         self.publisher_gripper = self.create_publisher(
             JointTrajectory,
             'crane_plus_gripper_controller/joint_trajectory', 10)
+        # /clockトピックのパブリッシャが存在すればuse_sim_timeをTrueにする
+        if self.get_publishers_info_by_topic('/clock') != []:
+            self.set_parameters([Parameter('use_sim_time', Parameter.Type.BOOL, True)])
+            self.get_logger().info('/clockパブリッシャ検出，use_sim_time: True')
 
     def publish_joint(self, q, time):
         msg = JointTrajectory()
@@ -58,6 +63,7 @@ def main():
 
     # 別のスレッドでrclpy.spin()を実行する
     thread = threading.Thread(target=rclpy.spin, args=(commander,))
+    threading.excepthook = lambda x: ()
     thread.start()
 
     # 最初の指令をパブリッシュする前に少し待つ
@@ -82,7 +88,7 @@ def main():
     print('スペースキーを押して起立状態にする')
     print('Escキーを押して終了')
 
-    # Ctrl+cでエラーにならないようにKeyboardInterruptを捕まえる
+    # Ctrl+CでエラーにならないようにKeyboardInterruptを捕まえる
     try:
         while True:
             # 順運動学
@@ -206,19 +212,19 @@ def main():
                     print(f'gripper: {gripper:.2f}')
                     commander.publish_gripper(gripper, dt)
                     publish = True
-                # パブリッシュした場合は設定時間の分停止
+                # パブリッシュした場合は，設定時間と同じだけ停止
                 if publish:
                     time.sleep(dt)
             time.sleep(0.01)
     except KeyboardInterrupt:
-        pass
+        thread.join()
+    else:
+        # 終了ポーズへゆっくり移動させる
+        joint = [0.0, 0.0, 0.0, 0.0]
+        gripper = 0
+        dt = 5
+        commander.publish_joint(joint, dt)
+        commander.publish_gripper(gripper, dt)
 
-    # 終了ポーズへゆっくり移動させる
-    joint = [0.0, 0.0, 0.0, 0.0]
-    gripper = 0
-    dt = 5
-    commander.publish_joint(joint, dt)
-    commander.publish_gripper(gripper, dt)
-
-    rclpy.shutdown()
+    rclpy.try_shutdown()
     print('終了')
