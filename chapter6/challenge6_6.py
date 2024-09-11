@@ -1,225 +1,250 @@
 import rclpy
 from rclpy.node import Node
-from rclpy.duration import Duration
-from rclpy.action import ActionClient
-from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
-from control_msgs.action import FollowJointTrajectory
-from threading import Event
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
-from tf2_ros import LookupException
-from tf2_ros.buffer import Buffer
-from tf2_ros.transform_listener import TransformListener
-from tf_transformations import euler_from_quaternion
-from airobot_interfaces.srv import StringCommand
-from crane_plus_commander.kinematics import (
-    from_gripper_ratio, gripper_in_range, inverse_kinematics, joint_in_range)
+import time
+import threading
+from crane_plus_commander.kbhit import KBHit
+from pymoveit2 import MoveIt2, GripperInterface
+from math import radians, atan2
+from tf_transformations import euler_from_quaternion, quaternion_from_euler
+
+GRIPPER_MIN = -radians(40.62) + 0.001
+GRIPPER_MAX = radians(38.27) - 0.001
+
+def to_gripper_ratio(gripper):
+    ratio = (gripper - GRIPPER_MIN) / (GRIPPER_MAX - GRIPPER_MIN)
+    return ratio
+
+def from_gripper_ratio(ratio):
+    gripper = GRIPPER_MIN + ratio * (GRIPPER_MAX - GRIPPER_MIN)
+    return gripper
 
 
-# CRANE+ V2用のアクションへリクエストを送り，他からサービスを受け付けるノード
-class Commander(Node):
+# CRNAE+ V2用のMoveItで逆運動学を計算し関節値の指令を送るノード
+class CommanderMoveit(Node):
 
-    def __init__(self, timer=False):
-        super().__init__('commander')
-        self.callback_group = ReentrantCallbackGroup()
+    def __init__(self):
+        super().__init__('commander_moveit')
         self.joint_names = [
             'crane_plus_joint1',
             'crane_plus_joint2',
             'crane_plus_joint3',
             'crane_plus_joint4']
-        self.gripper_names = [
-            'crane_plus_joint_hand']
-        self.action_client_joint = ActionClient(
-            self, FollowJointTrajectory,
-            'crane_plus_arm_controller/follow_joint_trajectory',
-            callback_group=self.callback_group)
-        self.action_client_gripper = ActionClient(
-            self, FollowJointTrajectory,
-            'crane_plus_gripper_controller/follow_joint_trajectory',
-            callback_group=self.callback_group)
-        self.action_done_event = Event()
-        # 文字列とポーズの組を保持する辞書
-        self.poses = {}
-        self.poses['zeros'] = [0, 0, 0, 0]
-        self.poses['ones'] = [1, 1, 1, 1]
-        self.poses['home'] = [0.0, -1.16, -2.01, -0.73]
-        self.poses['carry'] = [-0.00, -1.37, -2.52, 1.17]
-        self.service = self.create_service(
-            StringCommand, 'manipulation/command', self.command_callback,
-            callback_group=self.callback_group)
-        self._tf_buffer = Buffer()
-        self._tf_listener = TransformListener(
-            self._tf_buffer, self, spin_thread=True)
+        callback_group = ReentrantCallbackGroup()
+        self.moveit2 = MoveIt2(
+            node=self,
+            joint_names=self.joint_names,
+            base_link_name='crane_plus_base',
+            end_effector_name='crane_plus_link_endtip',
+            group_name='arm',
+            callback_group=callback_group,
+        )
+        self.moveit2.planner_id = 'RRTConnectkConfigDefault'
+        self.moveit2.max_velocity = 0.5
+        self.moveit2.max_acceleration = 0.5
+        self.cancel_after_secs = 0.0
 
-    def command_callback(self, request, response):
-        self.get_logger().info(f'command: {request.command}')
-        words = request.command.split()
-        if words[0] == 'set_pose':
-            self.set_pose(words, response)
-        elif words[0] == 'set_endtip':
-            self.set_endtip(words, response)
-        elif words[0] == 'set_gripper':
-            self.set_gripper(words, response)
-        else:
-            response.answer = f'NG {words[0]} not supported'
-        self.get_logger().info(f'answer: {response.answer}')
-        return response
+        gripper_joint_names = ['crane_plus_joint_hand']
+        self.gripper_interface = GripperInterface(
+            node=self,
+            gripper_joint_names=gripper_joint_names,
+            open_gripper_joint_positions=[GRIPPER_MIN],
+            closed_gripper_joint_positions=[GRIPPER_MAX],
+            gripper_group_name='gripper',
+            callback_group=callback_group,
+            gripper_command_action_name='gripper_action_controller/gripper_cmd',
+        )
 
-    def set_pose(self, words, response):
-        if len(words) < 2:
-            response.answer = f'NG {words[0]} argument required'
-            return
-        if not words[1] in self.poses:
-            response.answer = f'NG {words[1]} not found'
-            return
-        r = self.send_goal_joint(self.poses[words[1]], 3.0)
-        if self.check_action_result(r, response):
-            return
-        response.answer = 'OK'
+        self.object_id = 'table_top'
+        self.moveit2.add_collision_box(
+            id=self.object_id, size=[1.0, 1.0, 0.01],
+            position=[0.0, 0.0, 0.0], quat_xyzw=[0.0, 0.0, 0.0, 1.0])
 
-    def set_endtip(self, words, response):
-        if len(words) < 2:
-            response.answer = f'NG {words[0]} argument required'
-            return
-        target = words[1]
-        xyzrpy, e = self.get_xyzrpy(target)
-        if xyzrpy == []:
-            response.answer = f'NG {target} {e}'
-            return
-        [x, y, z, _, pitch, _] = xyzrpy
-        elbow_up = True
-        # inverse_kinematics()のpitchとは符号が逆
-        joint = inverse_kinematics([x, y, z, -pitch], elbow_up)
-        if joint is None:
-            response.answer = 'NG no solution'
-            return
-        if not all(joint_in_range(joint)):
-            response.answer = 'NG out of range'
-            return
-        dt = 3.0
-        r = self.send_goal_joint(joint, dt)
-        if self.check_action_result(r, response):
-            return
-        response.answer = 'OK'
-
-    def set_gripper(self, words, response):
-        if len(words) < 2:
-            response.answer = f'NG {words[0]} argument required'
-            return
-        try:
-            gripper_ratio = float(words[1])
-        except ValueError:
-            response.answer = f'NG {words[1]} unsuitable'
-            return
-        gripper = from_gripper_ratio(gripper_ratio)
-        if not gripper_in_range(gripper):
-            response.answer = 'NG out of range'
-            return
-        dt = 1.0
-        r = self.send_goal_gripper(gripper, dt)
-        if self.check_action_result(r, response):
-            return
-        response.answer = 'OK'
-
-    def get_xyzrpy(self, name):
-        when = rclpy.time.Time()
-        try:
-            trans = self._tf_buffer.lookup_transform(
-                'crane_plus_base',
-                name,
-                when,
-                timeout=Duration(seconds=1.0))
-        except LookupException as e:
-            return [], e
-        tx = trans.transform.translation.x
-        ty = trans.transform.translation.y
-        tz = trans.transform.translation.z
-        rx = trans.transform.rotation.x
-        ry = trans.transform.rotation.y
-        rz = trans.transform.rotation.z
-        rw = trans.transform.rotation.w
-        roll, pitch, yaw = euler_from_quaternion([rx, ry, rz, rw])
-        return [tx, ty, tz, roll, pitch, yaw], ''
-
-    def check_action_result(self, r, response, message=''):
-        if message != '':
-            message += ' '
-        if r is None:
-            response.answer = f'NG {message}timeout'
-            return True
-        if r.result.error_code != 0:
-            response.answer = f'NG {message}error_code: {r.result.error_code}'
-            return True
-        return False
-
-    def send_goal_joint(self, q, time):
-        goal_msg = FollowJointTrajectory.Goal()
-        goal_msg.trajectory = JointTrajectory()
-        goal_msg.trajectory.joint_names = self.joint_names
-        goal_msg.trajectory.points = [JointTrajectoryPoint()]
-        goal_msg.trajectory.points[0].positions = [
+    def move_joint(self, q):
+        joint_positions = [
             float(q[0]), float(q[1]), float(q[2]), float(q[3])]
-        goal_msg.trajectory.points[0].time_from_start = Duration(
-            seconds=int(time), nanoseconds=(time-int(time))*1e9).to_msg()
-        self.action_done_event.clear()
-        send_goal_future = self.action_client_joint.send_goal_async(goal_msg)
-        send_goal_future.add_done_callback(self.goal_response_callback)
-        self.action_result = None
-        self.action_done_event.wait(time*2)
-        return self.action_result
+        self.moveit2.move_to_configuration(joint_positions)
+        return self.moveit2.wait_until_executed()
 
-    def send_goal_gripper(self, gripper, time):
-        goal_msg = FollowJointTrajectory.Goal()
-        goal_msg.trajectory = JointTrajectory()
-        goal_msg.trajectory.joint_names = self.gripper_names
-        goal_msg.trajectory.points = [JointTrajectoryPoint()]
-        goal_msg.trajectory.points[0].positions = [float(gripper)]
-        goal_msg.trajectory.points[0].time_from_start = Duration(
-            seconds=int(time), nanoseconds=(time-int(time))*1e9).to_msg()
-        self.action_done_event.clear()
-        send_goal_future = self.action_client_gripper.send_goal_async(goal_msg)
-        send_goal_future.add_done_callback(self.goal_response_callback)
-        self.action_result = None
-        self.action_done_event.wait(time*2)
-        return self.action_result
+    def move_gripper(self, q):
+        position = float(q)
+        self.gripper_interface.move_to_position(position)
+        return self.gripper_interface.wait_until_executed()
 
-    def goal_response_callback(self, future):
-        goal_handle = future.result()
-        if not goal_handle.accepted:
-            return
-        self.get_result_future = goal_handle.get_result_async()
-        self.get_result_future.add_done_callback(self.get_result_callback)
+    def set_max_velocity(self, v):
+        self.moveit2.max_velocity = float(v)
 
-    def get_result_callback(self, future):
-        self.action_result = future.result()
-        self.action_done_event.set()
+    def forward_kinematics(self, joint):
+        pose_stamped = self.moveit2.compute_fk(joint)
+        p = pose_stamped.pose.position
+        [x, y, z] = [p.x, p.y, p.z]
+        q = pose_stamped.pose.orientation
+        [_, pitch,_] = euler_from_quaternion([q.x, q.y, q.z, q.w])
+        return [x, y, z, pitch]
+
+    def inverse_kinematics(self, endtip, elbow_up):
+        [x, y, z, pitch] = endtip
+        position = [x, y, z]
+        yaw = atan2(y, x)
+        quat_xyzw = quaternion_from_euler(0.0, pitch, yaw)
+        if elbow_up:
+            start_joint_state = [0.0, 0.0, -1.57, 0.0]
+        else:
+            start_joint_state = [0.0, 0.0, 1.57, 0.0]
+        joint_state = self.moveit2.compute_ik(
+            position, quat_xyzw, start_joint_state=start_joint_state)
+        if joint_state is None:
+            return None
+        d = {}
+        for i, name in enumerate(joint_state.name):
+            d[name] = joint_state.position[i]
+        joint = [d[x] for x in self.joint_names]
+        return joint
 
 
 def main():
-    print('開始')
-
     # ROSクライアントの初期化
     rclpy.init()
 
     # ノードクラスのインスタンス
-    commander = Commander()
+    commander = CommanderMoveit()
+
+    # 別のスレッドでrclpy.spin()を実行する
+    executor = MultiThreadedExecutor()
+    thread = threading.Thread(target=rclpy.spin, args=(commander,executor,))
+    threading.excepthook = lambda x: ()
+    thread.start()
 
     # 初期ポーズへゆっくり移動させる
-    commander.send_goal_joint(commander.poses['home'], 5)
-    commander.send_goal_gripper(from_gripper_ratio(1), 1)
-    print('サービスサーバ待機')
+    joint = [0.0, -1.16, -2.01, -0.73]
+    gripper = 0
+    commander.set_max_velocity(0.2)
+    commander.move_joint(joint)
+    commander.move_gripper(gripper)
+
+    # 逆運動学の解の種類
+    elbow_up = True
+
+    # キー読み取りクラスのインスタンス
+    kb = KBHit()
+
+    print('1, 2, 3, 4, 5, 6, 7, 8, 9, 0キーを押して関節を動かす')
+    print('a, z, s, x, d, c, f, v, g, bキーを押して手先を動かす')
+    print('eキーを押して逆運動学の解を切り替える')
+    print('スペースキーを押して起立状態にする')
+    print('Escキーを押して終了')
 
     # Ctrl+CでエラーにならないようにKeyboardInterruptを捕まえる
     try:
-        executor = MultiThreadedExecutor()
-        rclpy.spin(commander, executor)
-    except KeyboardInterrupt:
-        pass
+        while True:
+            # 順運動学
+            [x, y, z, pitch] = commander.forward_kinematics(joint)
+            ratio = to_gripper_ratio(gripper)
 
-    print('サービスサーバ停止')
-    # 終了ポーズへゆっくり移動させる
-    commander.send_goal_joint(commander.poses['zeros'], 5)
-    commander.send_goal_gripper(from_gripper_ratio(0), 1)
+            # 変更前の値を保持
+            joint_prev = joint.copy()
+            gripper_prev = gripper
+            elbow_up_prev = elbow_up
+
+            commander.set_max_velocity(1.0)
+
+            # キーが押されているか？
+            if kb.kbhit():
+                c = kb.getch()
+                # 押されたキーによって場合分けして処理
+                if c == '1':
+                    joint[0] -= 0.1
+                elif c == '2':
+                    joint[0] += 0.1
+                elif c == '3':
+                    joint[1] -= 0.1
+                elif c == '4':
+                    joint[1] += 0.1
+                elif c == '5':
+                    joint[2] -= 0.1
+                elif c == '6':
+                    joint[2] += 0.1
+                elif c == '7':
+                    joint[3] -= 0.1
+                elif c == '8':
+                    joint[3] += 0.1
+                elif c == '9':
+                    gripper -= 0.1
+                elif c == '0':
+                    gripper += 0.1
+                elif c == 'a':
+                    x += 0.01
+                elif c == 'z':
+                    x -= 0.01
+                elif c == 's':
+                    y += 0.01
+                elif c == 'x':
+                    y -= 0.01
+                elif c == 'd':
+                    z += 0.01
+                elif c == 'c':
+                    z -= 0.01
+                elif c == 'f':
+                    pitch += 0.1
+                elif c == 'v':
+                    pitch -= 0.1
+                elif c == 'g':
+                    ratio += 0.1
+                elif c == 'b':
+                    ratio -= 0.1
+                elif c == 'e':
+                    elbow_up = not elbow_up
+                    print(f'elbow_up: {elbow_up}')
+                    commander.set_max_velocity(0.2)
+                elif c == ' ':  # スペースキー
+                    joint = [0.0, 0.0, 0.0, 0.0]
+                    gripper = 0
+                    commander.set_max_velocity(0.2)
+                elif ord(c) == 27:  # Escキー
+                    break
+
+                # 逆運動学
+                if c in 'azsxdcfve':
+                    print('inverse_kinematics() ...', end='')
+                    joint = commander.inverse_kinematics([x, y, z, pitch], elbow_up)
+                    print(' done')
+                    if joint is None:
+                        print('逆運動学の解なし')
+                        joint = joint_prev.copy()
+                        elbow_up = elbow_up_prev
+                elif c in 'gb':
+                    gripper = from_gripper_ratio(ratio)
+
+                if not (GRIPPER_MIN <= gripper <= GRIPPER_MAX):
+                    print('グリッパ指令値が範囲外')
+                    gripper = gripper_prev
+
+                # 変化があれば指令を送る
+                if joint != joint_prev:
+                    print((f'joint: [{joint[0]:.2f}, {joint[1]:.2f}, '
+                           f'{joint[2]:.2f}, {joint[3]:.2f}]'))
+                    success = commander.move_joint(joint)
+                    if not success:
+                        print('move_joint()失敗')
+                        joint = joint_prev.copy()
+                if gripper != gripper_prev:
+                    print(f'gripper: {gripper:.2f}')
+                    success = commander.move_gripper(gripper)
+                    if not success:
+                        print('move_gripper()失敗')
+                        gripper = gripper_prev
+
+            time.sleep(0.01)
+    except KeyboardInterrupt:
+        thread.join()
+    else:
+        print('終了')
+        # 終了ポーズへゆっくり移動させる
+        joint = [0.0, 0.0, 0.0, 0.0]
+        gripper = 0
+        commander.set_max_velocity(0.2)
+        commander.move_joint(joint)
+        commander.move_gripper(gripper)
 
     rclpy.try_shutdown()
-    print('終了')
