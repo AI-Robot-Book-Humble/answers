@@ -45,9 +45,8 @@ class CommanderMoveit(Node):
             callback_group=callback_group,
         )
         self.moveit2.planner_id = 'RRTConnectkConfigDefault'
-        self.moveit2.max_velocity = 0.5
-        self.moveit2.max_acceleration = 0.5
-        self.cancel_after_secs = 0.0
+        self.moveit2.max_velocity = 1.0
+        self.moveit2.max_acceleration = 1.0
 
         gripper_joint_names = ['crane_plus_joint_hand']
         self.gripper_interface = GripperInterface(
@@ -57,8 +56,9 @@ class CommanderMoveit(Node):
             closed_gripper_joint_positions=[GRIPPER_MAX],
             gripper_group_name='gripper',
             callback_group=callback_group,
-            gripper_command_action_name='gripper_action_controller/gripper_cmd',
         )
+        self.gripper_interface.max_velocity = 1.0
+        self.gripper_interface.max_acceleration = 1.0
 
         # tf
         self.tf_buffer = Buffer()
@@ -125,9 +125,10 @@ def main():
 
     # 初期ポーズへゆっくり移動させる
     joint = [0.0, -1.16, -2.01, -0.73]
+    gripper = GRIPPER_MIN
     commander.set_max_velocity(0.2)
     commander.move_joint(joint)
-    commander.move_gripper(GRIPPER_MIN)
+    commander.move_gripper(gripper)
 
     # 逆運動学の解の種類
     elbow_up = True
@@ -147,6 +148,7 @@ def main():
     # Ctrl+CでエラーにならないようにKeyboardInterruptを捕まえる
     try:
         while True:
+            time.sleep(0.01)            
             # キーが押されているか？
             if kb.kbhit():
                 c = kb.getch()
@@ -179,7 +181,7 @@ def main():
                         if not success:
                             print('グリッパを開くことに失敗')
                             continue
-                        # 準備姿勢へ動く
+                        # 準備ポーズへ動く
                         offset = 0.05
                         d = sqrt(x2**2 + y2**2)
                         x1 = x2 - offset * x2 / d
@@ -187,12 +189,12 @@ def main():
                         z1 = z2
                         success = commander.move_endtip([x1, y1, z1, pitch])
                         if not success:
-                            print('準備姿勢への移動に失敗')
+                            print('準備ポーズへの移動に失敗')
                             continue
-                        # 把持姿勢へ動く
+                        # 把持ポーズへ動く
                         success = commander.move_endtip([x2, y2, z2, pitch])
                         if not success:
-                            print('把持姿勢への移動に失敗')
+                            print('把持ポーズへの移動に失敗')
                             continue
                         # グリッパを閉じる
                         gripper_ratio = 0.95
@@ -200,22 +202,22 @@ def main():
                         if not success:
                             print('グリッパを閉じることに失敗')
                             continue
-                        # 運搬姿勢へ動く
+                        # 運搬ポーズへ動く
                         joint = [-0.00, -1.37, -2.52, 1.17]
                         success = commander.move_joint(joint)
                         if not success:
-                            print('運搬姿勢への移動に失敗')
+                            print('運搬ポーズへの移動に失敗')
                             continue
                         print('完了')
-            time.sleep(0.01)            
     except KeyboardInterrupt:
         thread.join()
     else:
         print('終了')
         # 終了ポーズへゆっくり移動させる
         joint = [0.0, 0.0, 0.0, 0.0]
+        gripper = GRIPPER_MAX
         commander.set_max_velocity(0.2)
         commander.move_joint(joint)
-        commander.move_gripper(GRIPPER_MAX)
+        commander.move_gripper(gripper)
 
     rclpy.try_shutdown()

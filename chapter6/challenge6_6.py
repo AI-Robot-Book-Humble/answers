@@ -41,9 +41,8 @@ class CommanderMoveit(Node):
             callback_group=callback_group,
         )
         self.moveit2.planner_id = 'RRTConnectkConfigDefault'
-        self.moveit2.max_velocity = 0.5
-        self.moveit2.max_acceleration = 0.5
-        self.cancel_after_secs = 0.0
+        self.moveit2.max_velocity = 1.0
+        self.moveit2.max_acceleration = 1.0
 
         gripper_joint_names = ['crane_plus_joint_hand']
         self.gripper_interface = GripperInterface(
@@ -53,13 +52,9 @@ class CommanderMoveit(Node):
             closed_gripper_joint_positions=[GRIPPER_MAX],
             gripper_group_name='gripper',
             callback_group=callback_group,
-            gripper_command_action_name='gripper_action_controller/gripper_cmd',
         )
-
-        self.object_id = 'table_top'
-        self.moveit2.add_collision_box(
-            id=self.object_id, size=[1.0, 1.0, 0.01],
-            position=[0.0, 0.0, 0.0], quat_xyzw=[0.0, 0.0, 0.0, 1.0])
+        self.gripper_interface.max_velocity = 1.0
+        self.gripper_interface.max_acceleration = 1.0
 
     def move_joint(self, q):
         joint_positions = [
@@ -102,6 +97,14 @@ class CommanderMoveit(Node):
         joint = [d[x] for x in self.joint_names]
         return joint
 
+    def add_collision(self):
+        self.moveit2.add_collision_box(
+            id='table_top', size=[1.0, 1.0, 0.002],
+            position=[0.0, 0.0, -0.001], quat_xyzw=[0.0, 0.0, 0.0, 1.0])
+
+    def clear_collision(self):
+        self.moveit2.clear_all_collision_objects()
+
 
 def main():
     # ROSクライアントの初期化
@@ -123,6 +126,9 @@ def main():
     commander.move_joint(joint)
     commander.move_gripper(gripper)
 
+    # 障害物の追加
+    commander.add_collision()
+
     # 逆運動学の解の種類
     elbow_up = True
 
@@ -133,25 +139,29 @@ def main():
     print('a, z, s, x, d, c, f, v, g, bキーを押して手先を動かす')
     print('eキーを押して逆運動学の解を切り替える')
     print('スペースキーを押して起立状態にする')
+    print('Aキーを押して机の天板を障害物として追加')
+    print('Cキーを押して障害物を削除')
     print('Escキーを押して終了')
 
     # Ctrl+CでエラーにならないようにKeyboardInterruptを捕まえる
     try:
         while True:
-            # 順運動学
-            [x, y, z, pitch] = commander.forward_kinematics(joint)
-            ratio = to_gripper_ratio(gripper)
-
-            # 変更前の値を保持
-            joint_prev = joint.copy()
-            gripper_prev = gripper
-            elbow_up_prev = elbow_up
-
-            commander.set_max_velocity(1.0)
-
+            time.sleep(0.01)
             # キーが押されているか？
             if kb.kbhit():
                 c = kb.getch()
+
+                # 順運動学
+                [x, y, z, pitch] = commander.forward_kinematics(joint)
+                ratio = to_gripper_ratio(gripper)
+
+                # 変更前の値を保持
+                joint_prev = joint.copy()
+                gripper_prev = gripper
+                elbow_up_prev = elbow_up
+
+                commander.set_max_velocity(1.0)
+
                 # 押されたキーによって場合分けして処理
                 if c == '1':
                     joint[0] -= 0.1
@@ -201,14 +211,18 @@ def main():
                     joint = [0.0, 0.0, 0.0, 0.0]
                     gripper = 0
                     commander.set_max_velocity(0.2)
+                elif c == 'A':
+                    print('障害物を追加')
+                    commander.add_collision()
+                elif c == 'C':
+                    print('障害物を削除')
+                    commander.clear_collision()
                 elif ord(c) == 27:  # Escキー
                     break
 
                 # 逆運動学
                 if c in 'azsxdcfve':
-                    print('inverse_kinematics() ...', end='')
                     joint = commander.inverse_kinematics([x, y, z, pitch], elbow_up)
-                    print(' done')
                     if joint is None:
                         print('逆運動学の解なし')
                         joint = joint_prev.copy()
@@ -234,8 +248,6 @@ def main():
                     if not success:
                         print('move_gripper()失敗')
                         gripper = gripper_prev
-
-            time.sleep(0.01)
     except KeyboardInterrupt:
         thread.join()
     else:
@@ -246,5 +258,8 @@ def main():
         commander.set_max_velocity(0.2)
         commander.move_joint(joint)
         commander.move_gripper(gripper)
+
+        # 障害物の削除
+        commander.clear_collision()
 
     rclpy.try_shutdown()
