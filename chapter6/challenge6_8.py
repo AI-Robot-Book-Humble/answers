@@ -11,8 +11,8 @@ from tf2_ros.transform_listener import TransformListener
 from tf_transformations import euler_from_quaternion, quaternion_from_euler
 from airobot_interfaces.action import StringCommand
 import threading
-from pymoveit2 import MoveIt2, GripperInterface, MoveIt2State
 from math import radians, atan2
+from pymoveit2 import MoveIt2, GripperInterface, MoveIt2State
 
 GRIPPER_MIN = -radians(40.62) + 0.001
 GRIPPER_MAX = radians(38.27) - 0.001
