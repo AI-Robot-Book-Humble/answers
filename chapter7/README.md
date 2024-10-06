@@ -11,7 +11,7 @@
 
 チャレンジ７.１ではVoice状態から接続する音声の疑似ノードを第3章で作成した音声認識に置き換えるステートマシンが動作するか確認するチャレンジを提案しました．
 
-1. まず，[bringme_action_behavior_sm.py](https://github.com/AI-Robot-Book-Humble/chapter7/blob/master/bringme_sm_flexbe/bringme_sm_flexbe_behaviors/bringme_sm_flexbe_behaviors/bringme_action_behavior_sm.py)という元のステートマシンを[challenge_7_1_bringme_action_behavior_sm](bringme_sm_advanced_flexbe/challenge_7_1_bringme_action_behavior_sm.py)に書き換えてください．
+1. まず，[bringme_action_behavior_sm.py](https://github.com/AI-Robot-Book-Humble/chapter7/blob/master/bringme_sm_flexbe/bringme_sm_flexbe_behaviors/bringme_sm_flexbe_behaviors/bringme_action_behavior_sm.py)という元のステートマシンを[challenge_7_1_bringme_action_behavior_sm.py](bringme_sm_advanced_flexbe/challenge_7_1_bringme_action_behavior_sm.py)に書き換えてください．
 
 こちらでは，[95行目](https://github.com/AI-Robot-Book-Humble/chapter7/blob/7199739f0d2d78ba27b64cb359059d87bbe964bd/bringme_sm_flexbe/bringme_sm_flexbe_behaviors/bringme_sm_flexbe_behaviors/bringme_action_behavior_sm.py#L95)に書かれている音声認識を行うノードの名前を`/speech_recognition`に書き変えます．
 ```diff
@@ -19,7 +19,7 @@
 + VoiceActionState(timeout=timeout, action_topic="/speech_recognition/command"),
 ```
 
-2. 次に，元の音声の疑似ノードである[voice_action_state.py](https://github.com/AI-Robot-Book-Humble/chapter7/blob/master/bringme_sm_flexbe/bringme_sm_flexbe_states/bringme_sm_flexbe_states/voice_action_state.py)を[challenge_7_1_voice_action_state](bringme_sm_advanced_flexbe/challenge_7_1_voice_action_state.py)に書き換えてください．
+2. 次に，元の音声の疑似ノードである[voice_action_state.py](https://github.com/AI-Robot-Book-Humble/chapter7/blob/master/bringme_sm_flexbe/bringme_sm_flexbe_states/bringme_sm_flexbe_states/voice_action_state.py)を[challenge_7_1_voice_action_state.py](bringme_sm_advanced_flexbe/challenge_7_1_voice_action_state.py)に書き換えてください．
 
 こちらでは，複雑な言語処理は行わないのですが，音声認識から取得した音声データから`cup`という対象物と`kitchen`という対象場所が含まれているかどうかを確認します．
 もし，どちらか文章には含まれていなければ，状態は失敗し，もう一度音声を聞きます．
