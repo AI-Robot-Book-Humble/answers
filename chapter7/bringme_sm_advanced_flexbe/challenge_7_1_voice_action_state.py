@@ -96,7 +96,8 @@ class VoiceActionState(EventState):
             else:
                 Logger.loginfo(f'音声認識の結果: {userdata.text}')
 
-                # 音声認識の結果を処理する必要があります．
+                # 音声認識の結果を処理する必要があります
+                # 今回は，カップとキッチンの単語が含まれているかを確認します
                 userdata.target      = 'cup' if 'cup' in userdata.text else ''
                 userdata.destination = 'kitchen' if 'kitchen' in userdata.text else ''
                 # Challenge3.1にご参照ください．
