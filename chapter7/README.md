@@ -23,6 +23,8 @@
 
 こちらでは，複雑な言語処理は行わないのですが，音声認識から取得した音声データから`cup`という対象物と`kitchen`という対象場所が含まれているかどうかを確認します．
 もし，どちらか文章には含まれていなければ，状態は失敗し，もう一度音声を聞きます．
+
+更新前: [行99目](https://github.com/AI-Robot-Book-Humble/chapter7/blob/7199739f0d2d78ba27b64cb359059d87bbe964bd/bringme_sm_flexbe/bringme_sm_flexbe_states/bringme_sm_flexbe_states/voice_action_state.py#L99)-[行104目](https://github.com/AI-Robot-Book-Humble/chapter7/blob/7199739f0d2d78ba27b64cb359059d87bbe964bd/bringme_sm_flexbe/bringme_sm_flexbe_states/bringme_sm_flexbe_states/voice_action_state.py#L104)
 ```diff
 - # 音声認識の結果を処理する必要があります
 - userdata.target      = 'cup'
@@ -30,7 +32,10 @@
 -
 - self._return = 'done'
 - return self._return # 'done'という結果を返します
+```
 
+更新後: [行99目](https://github.com/AI-Robot-Book-Humble/answers/blob/30f87e0f67b5c0aefda3509923b89f8e637ee831/chapter7/bringme_sm_advanced_flexbe/challenge_7_1_voice_action_state.py#L99)-[行111目](https://github.com/AI-Robot-Book-Humble/answers/blob/30f87e0f67b5c0aefda3509923b89f8e637ee831/chapter7/bringme_sm_advanced_flexbe/challenge_7_1_voice_action_state.py#L111)
+```diff
 + # 音声認識の結果を処理する必要があります
 + # 今回は，カップとキッチンの単語が含まれているかを確認します
 + userdata.target      = 'cup' if 'cup' in userdata.text else ''
@@ -54,13 +59,15 @@
 ```bash
 ros2 launch ~/airobot_ws/src/answers/chapter7/bringme_sm_advanced_flexbe challenge_7_1_bringme_nodes.launch.py
 ```
+> [!NOTE]
+> このラウンチファイルでは，`chapter3`の[speech_recognition_server](https://github.com/AI-Robot-Book-Humble/chapter3/blob/master/speech_action/speech_action/speech_recognition_server.py)を実行します．
 
 - 別の端末でFlexBe WebUIを立ち上げて，`Bringme Action Behavior`というステートマシンを選択してください．
 ```bash
 ros2 launch ~/airobot_ws/src/answers/chapter7/bringme_sm_advanced_flexbe challenge_7_1_bringme_nodes.launch.py
 ```
 
-- FlexBe WebIUのState Machine Editorの中にある`Voice`状態のパラメータを確認して，`action_topic`は`"/speech_recognition/command"`になっているか確かめてください．
+- FlexBe WebIUのState Machine Editorの中にある`Voice`状態のパラメータを確認して，`action_topic`には`"/speech_recognition/command"`と書かれているか確かめてください．
 
 ![check_bringme_action_behavior_sm](docs/check_bringme_action_behavior_sm.png)
 
