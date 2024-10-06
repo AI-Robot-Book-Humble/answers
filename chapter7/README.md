@@ -1,44 +1,76 @@
-## 7章の解答例
-### challenge_7_1.py
-- このフォルダの```challenge_7_1.py```ファイルを，```~/airobot_ws/src/chapter7/sample_sm/sample_sm```にコピーする．
+## 第７章の解答例
 
-- ```~/airobot_ws/src/chapter7/sample_sm/setup.py``` の entry_pointsの設定のリストに以下の行を追加する．
-```
-            'challenge_7_1 = sample_sm.challenge_7_1:main'
-```
+こちらのパッケージには第７章に挙げられたチャレンジを解答します．
 
-- 端末で以下を実行
-```
-cd ~/airobot_ws
-source install/setup.bash
-```
+> [!IMPORTANT]
+> `bringme_sm_advanced_smach`というパッケージはサポートしません．
+そちらのソースコードについては，[AI Robot Book 各章の解答例](https://github.com/AI-Robot-Book/answers/tree/master/chapter7)の方にIssueを立ててください．
 
-- 端末で以下を実行
-```
-ros2 run sample_sm challenge_7_1
-```
 
-### challenge_7_2.py
-- このフォルダの```challenge_7_2.py```ファイルを，```~/airobot_ws/src/chapter7/pseudo_node/pseudo_node```にコピーする．
-- ```~/airobot_ws/src/chapter7/pseudo_node/setup.py```の```entry_points```の設定のリストに以下の変更を行います．
-```
-            'voice_node = pseudo_node.voice_node:main'
-```
-から
-```
-            'voice_node = pseudo_node.challenge_7_2:main'
-``` 
-- 端末で以下を実行
-```
-ros2 launch bringme_sm bringme.launch.py
+### チャレンジ７.１
+
+チャレンジ７.１ではVoice状態から接続する音声の疑似ノードを第3章で作成した音声認識に置き換えるステートマシンが動作するか確認するチャレンジを提案しました．
+
+1. まず，[bringme_action_behavior_sm.py](https://github.com/AI-Robot-Book-Humble/chapter7/blob/master/bringme_sm_flexbe/bringme_sm_flexbe_behaviors/bringme_sm_flexbe_behaviors/bringme_action_behavior_sm.py)という元のステートマシンを[challenge_7_1_bringme_action_behavior_sm](bringme_sm_advanced_flexbe/challenge_7_1_bringme_action_behavior_sm.py)に書き換えてください．
+
+こちらでは，[95行目](https://github.com/AI-Robot-Book-Humble/chapter7/blob/7199739f0d2d78ba27b64cb359059d87bbe964bd/bringme_sm_flexbe/bringme_sm_flexbe_behaviors/bringme_sm_flexbe_behaviors/bringme_action_behavior_sm.py#L95)に書かれている音声認識を行うノードの名前を`/speech_recognition`に書き変えます．
+```diff
+- VoiceActionState(timeout=timeout, action_topic="ps_voice/command"),
++ VoiceActionState(timeout=timeout, action_topic="/speech_recognition/command"),
 ```
 
-### 備考
-現状は認識した音声が何であろうと，次のステートへ進むというプログラムになっています（何も音声を認識しなければステートは進みません）．
-そのため，認識した音声から特定の物体名や場所名を見つけるためには，
-```chapter7/bringme_sm/bringme_sm/bringme_sm.py```
-のVoiceクラスに存在する94, 95行目の  
-```find_object_name(response.answer)```
-```find_location_name(response.answer)```
-を新たに関数として追加する必要があります．  
-```Challenge3.1```を参照
+2. 次に，元の音声の疑似ノードである[voice_action_state.py](https://github.com/AI-Robot-Book-Humble/chapter7/blob/master/bringme_sm_flexbe/bringme_sm_flexbe_states/bringme_sm_flexbe_states/voice_action_state.py)を[challenge_7_1_voice_action_state](bringme_sm_advanced_flexbe/challenge_7_1_voice_action_state.py)に書き換えてください．
+
+こちらでは，複雑な言語処理は行わないのですが，音声認識から取得した音声データから`cup`という対象物と`kitchen`という対象場所が含まれているかどうかを確認します．
+もし，どちらか文章には含まれていなければ，状態は失敗し，もう一度音声を聞きます．
+```diff
+- # 音声認識の結果を処理する必要があります
+- userdata.target      = 'cup'
+- userdata.destination = 'kitchen'
+-
+- self._return = 'done'
+- return self._return # 'done'という結果を返します
+
++ # 音声認識の結果を処理する必要があります
++ # 今回は，カップとキッチンの単語が含まれているかを確認します
++ userdata.target      = 'cup' if 'cup' in userdata.text else ''
++ userdata.destination = 'kitchen' if 'kitchen' in userdata.text else ''
++ # Challenge3.1にご参照ください．
++ # userdata.target, userdata.destination = search_object_and_place(userdata.text)
++
++ if len(userdata.target) > 0 and len(userdata.destination) > 0:    
++     self._return = 'done' # 'done'という結果を設定します
++ else:        
++     self._return = 'failed' # 'failed'という結果を設定します
+
++ return self._return # 'done'または'failed'という結果を返します
+```
+
+> [!NOTE]
+> より賢い自然言語処理に対応するために`search_object_and_place()`という関数を利用する場合は，[challenge_3_1.py](../chapter3/)に参照してください．
+
+3. また，必要なノードを立ち上げましょう．
+- 音声認識とその他の疑似ノードを立ち上げます．
+```bash
+ros2 launch ~/airobot_ws/src/answers/chapter7/bringme_sm_advanced_flexbe challenge_7_1_bringme_nodes.launch.py
+```
+
+- 別の端末でFlexBe WebUIを立ち上げて，`Bringme Action Behavior`というステートマシンを選択してください．
+```bash
+ros2 launch ~/airobot_ws/src/answers/chapter7/bringme_sm_advanced_flexbe challenge_7_1_bringme_nodes.launch.py
+```
+
+- FlexBe WebIUのState Machine Editorの中にある`Voice`状態のパラメータを確認して，`action_topic`は`"/speech_recognition/command"`になっているか確かめてください．
+
+![check_bringme_action_behavior_sm](docs/check_bringme_action_behavior_sm.png)
+
+4. 最後に，FlexBe WebIUのRuntime Controlへ移動して，`listen_time`で聴音時間を設定して，`Start Execution`．
+
+> [!NOTE]
+> デフォルトの聴音時間は`10`秒となっております．
+
+
+## ディレクトリ構成
+
+- **[bringme_sm_advanced_flexbe](bringme_sm_advanced_flexbe):** Bring meタスクのステートマシンのチャレンジプログラム (FlexBE版)
+- **[(アーカイブ) bringme_sm_advanced_smach](bringme_sm_advanced_smach):** Bring meタスクのステートマシンのチャレンジプログラム (Smach版)
