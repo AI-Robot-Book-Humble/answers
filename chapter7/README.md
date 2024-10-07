@@ -13,7 +13,7 @@
 
 1. まず，[bringme_action_behavior_sm.py](https://github.com/AI-Robot-Book-Humble/chapter7/blob/master/bringme_sm_flexbe/bringme_sm_flexbe_behaviors/bringme_sm_flexbe_behaviors/bringme_action_behavior_sm.py)という元のステートマシンを[challenge_7_1_bringme_action_behavior_sm.py](bringme_sm_advanced_flexbe/challenge_7_1_bringme_action_behavior_sm.py)に書き換えてください．
 
-こちらでは，[95行目](https://github.com/AI-Robot-Book-Humble/chapter7/blob/7199739f0d2d78ba27b64cb359059d87bbe964bd/bringme_sm_flexbe/bringme_sm_flexbe_behaviors/bringme_sm_flexbe_behaviors/bringme_action_behavior_sm.py#L95)に書かれている音声認識を行うノードの名前を`/speech_recognition`に書き変えます．
+    こちらでは，[95行目](https://github.com/AI-Robot-Book-Humble/chapter7/blob/7199739f0d2d78ba27b64cb359059d87bbe964bd/bringme_sm_flexbe/bringme_sm_flexbe_behaviors/bringme_sm_flexbe_behaviors/bringme_action_behavior_sm.py#L95)に書かれている音声認識を行うノードの名前を`/speech_recognition`に書き変えます．
 ```diff
 - VoiceActionState(timeout=timeout, action_topic="ps_voice/command"),
 + VoiceActionState(timeout=timeout, action_topic="/speech_recognition/command"),
@@ -21,8 +21,8 @@
 
 2. 次に，元の音声の疑似ノードである[voice_action_state.py](https://github.com/AI-Robot-Book-Humble/chapter7/blob/master/bringme_sm_flexbe/bringme_sm_flexbe_states/bringme_sm_flexbe_states/voice_action_state.py)を[challenge_7_1_voice_action_state.py](bringme_sm_advanced_flexbe/challenge_7_1_voice_action_state.py)に書き換えてください．
 
-こちらでは，複雑な言語処理は行わないのですが，音声認識から取得した音声データから`cup`という対象物と`kitchen`という対象場所が含まれているかどうかを確認します．
-もし，どちらか文章には含まれていなければ，状態は失敗し，もう一度音声を聞きます．
+    こちらでは，複雑な言語処理は行わないのですが，音声認識から取得した音声データから`cup`という対象物と`kitchen`という対象場所が含まれているかどうかを確認します．
+    もし，どちらか文章には含まれていなければ，状態は失敗し，もう一度音声を聞きます．
 
 更新前: [行99目](https://github.com/AI-Robot-Book-Humble/chapter7/blob/7199739f0d2d78ba27b64cb359059d87bbe964bd/bringme_sm_flexbe/bringme_sm_flexbe_states/bringme_sm_flexbe_states/voice_action_state.py#L99)-[行104目](https://github.com/AI-Robot-Book-Humble/chapter7/blob/7199739f0d2d78ba27b64cb359059d87bbe964bd/bringme_sm_flexbe/bringme_sm_flexbe_states/bringme_sm_flexbe_states/voice_action_state.py#L104)
 ```diff
@@ -54,24 +54,32 @@
 > [!NOTE]
 > より賢い自然言語処理に対応するために`search_object_and_place()`という関数を利用する場合は，[challenge_3_1.py](../chapter3/)に参照してください．
 
-3. また，必要なノードを立ち上げましょう．
-- 音声認識とその他の疑似ノードを立ち上げます．
+3. プログラムを修正した後，パッケージをコンパイルし，読み込みしましょう．
+```bash
+cd ~/ai_robot_ws
+colcon build
+sourcce install/setup.bash
+``` 
+
+4. また，音声認識とその他の疑似ノードを立ち上げます．
 ```bash
 ros2 launch ~/airobot_ws/src/answers/chapter7/bringme_sm_advanced_flexbe challenge_7_1_bringme_nodes.launch.py
 ```
 > [!NOTE]
-> このラウンチファイルでは，`chapter3`の[speech_recognition_server](https://github.com/AI-Robot-Book-Humble/chapter3/blob/master/speech_action/speech_action/speech_recognition_server.py)を実行します．
+> このラウンチファイルでは，`chapter3`の[speech_recognition_server.py](https://github.com/AI-Robot-Book-Humble/chapter3/blob/master/speech_action/speech_action/speech_recognition_server.py)を実行します．
 
-- 別の端末でFlexBe WebUIを立ち上げて，`Bringme Action Behavior`というステートマシンを選択してください．
+5. 別の端末でFlexBe WebUIを立ち上げて，`Bringme Action Behavior`というステートマシンを選択してください．
 ```bash
-ros2 launch ~/airobot_ws/src/answers/chapter7/bringme_sm_advanced_flexbe challenge_7_1_bringme_nodes.launch.py
+ros2 launch flexbe_webui flexbe_full.launch.py
 ```
+![launch_bringme_action_behavior_sm](docs/launch_bringme_action_behavior_sm.png)
 
-- FlexBe WebIUのState Machine Editorの中にある`Voice`状態のパラメータを確認して，`action_topic`には`"/speech_recognition/command"`と書かれているか確かめてください．
+6. FlexBe WebIUのState Machine Editorの中にある`Voice`状態のパラメータを確認して，`action_topic`には`"/speech_recognition/command"`と書かれているか確かめてください．
 
 ![check_bringme_action_behavior_sm](docs/check_bringme_action_behavior_sm.png)
 
-4. 最後に，FlexBe WebIUのRuntime Controlへ移動して，`listen_time`で聴音時間を設定して，`Start Execution`．
+7. 最後に，FlexBe WebIUのRuntime Controlへ移動して，`listen_time`で聴音時間を設定して，`Start Execution`．
+![exec_bringme_action_behavior_sm](docs/exec_bringme_action_behavior_sm.png)
 
 > [!NOTE]
 > デフォルトの聴音時間は`10`秒となっております．
