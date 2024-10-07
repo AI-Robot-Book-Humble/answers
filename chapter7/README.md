@@ -14,9 +14,15 @@
 1. まず，[bringme_action_behavior_sm.py](https://github.com/AI-Robot-Book-Humble/chapter7/blob/master/bringme_sm_flexbe/bringme_sm_flexbe_behaviors/bringme_sm_flexbe_behaviors/bringme_action_behavior_sm.py)という元のステートマシンを[challenge_7_1_bringme_action_behavior_sm.py](bringme_sm_advanced_flexbe/challenge_7_1_bringme_action_behavior_sm.py)に書き換えてください．
 
     こちらでは，[95行目](https://github.com/AI-Robot-Book-Humble/chapter7/blob/7199739f0d2d78ba27b64cb359059d87bbe964bd/bringme_sm_flexbe/bringme_sm_flexbe_behaviors/bringme_sm_flexbe_behaviors/bringme_action_behavior_sm.py#L95)に書かれている音声認識を行うノードの名前を`/speech_recognition`に書き変えます．
-```diff
-- VoiceActionState(timeout=timeout, action_topic="ps_voice/command"),
-+ VoiceActionState(timeout=timeout, action_topic="/speech_recognition/command"),
+
+更新前: [95行目](https://github.com/AI-Robot-Book-Humble/chapter7/blob/7199739f0d2d78ba27b64cb359059d87bbe964bd/bringme_sm_flexbe/bringme_sm_flexbe_behaviors/bringme_sm_flexbe_behaviors/bringme_action_behavior_sm.py#L95)
+```python
+VoiceActionState(timeout=timeout, action_topic="ps_voice/command"),
+```
+
+更新後: [95行目](https://github.com/AI-Robot-Book-Humble/answers/blob/c244fbf2d38711397f5a8fe29374c8f3b9d6df4a/chapter7/bringme_sm_advanced_flexbe/challenge_7_1_bringme_action_behavior_sm.py#L95)
+```python
+VoiceActionState(timeout=timeout, action_topic="/speech_recognition/command"),
 ```
 
 2. 次に，元の音声の疑似ノードである[voice_action_state.py](https://github.com/AI-Robot-Book-Humble/chapter7/blob/master/bringme_sm_flexbe/bringme_sm_flexbe_states/bringme_sm_flexbe_states/voice_action_state.py)を[challenge_7_1_voice_action_state.py](bringme_sm_advanced_flexbe/challenge_7_1_voice_action_state.py)に書き換えてください．
@@ -25,30 +31,30 @@
     もし，どちらか文章には含まれていなければ，状態は失敗し，もう一度音声を聞きます．
 
 更新前: [行99目](https://github.com/AI-Robot-Book-Humble/chapter7/blob/7199739f0d2d78ba27b64cb359059d87bbe964bd/bringme_sm_flexbe/bringme_sm_flexbe_states/bringme_sm_flexbe_states/voice_action_state.py#L99)-[行104目](https://github.com/AI-Robot-Book-Humble/chapter7/blob/7199739f0d2d78ba27b64cb359059d87bbe964bd/bringme_sm_flexbe/bringme_sm_flexbe_states/bringme_sm_flexbe_states/voice_action_state.py#L104)
-```diff
-- # 音声認識の結果を処理する必要があります
-- userdata.target      = 'cup'
-- userdata.destination = 'kitchen'
--
-- self._return = 'done'
-- return self._return # 'done'という結果を返します
+```python
+# 音声認識の結果を処理する必要があります
+userdata.target      = 'cup'
+userdata.destination = 'kitchen'
+
+self._return = 'done'
+return self._return # 'done'という結果を返します
 ```
 
 更新後: [行99目](https://github.com/AI-Robot-Book-Humble/answers/blob/30f87e0f67b5c0aefda3509923b89f8e637ee831/chapter7/bringme_sm_advanced_flexbe/challenge_7_1_voice_action_state.py#L99)-[行111目](https://github.com/AI-Robot-Book-Humble/answers/blob/30f87e0f67b5c0aefda3509923b89f8e637ee831/chapter7/bringme_sm_advanced_flexbe/challenge_7_1_voice_action_state.py#L111)
-```diff
-+ # 音声認識の結果を処理する必要があります
-+ # 今回は，カップとキッチンの単語が含まれているかを確認します
-+ userdata.target      = 'cup' if 'cup' in userdata.text else ''
-+ userdata.destination = 'kitchen' if 'kitchen' in userdata.text else ''
-+ # Challenge3.1にご参照ください．
-+ # userdata.target, userdata.destination = search_object_and_place(userdata.text)
-+
-+ if len(userdata.target) > 0 and len(userdata.destination) > 0:    
-+     self._return = 'done' # 'done'という結果を設定します
-+ else:        
-+     self._return = 'failed' # 'failed'という結果を設定します
+```python
+# 音声認識の結果を処理する必要があります
+# 今回は，カップとキッチンの単語が含まれているかを確認します
+userdata.target      = 'cup' if 'cup' in userdata.text else ''
+userdata.destination = 'kitchen' if 'kitchen' in userdata.text else ''
+# Challenge3.1にご参照ください．
+# userdata.target, userdata.destination = search_object_and_place(userdata.text)
 
-+ return self._return # 'done'または'failed'という結果を返します
+if len(userdata.target) > 0 and len(userdata.destination) > 0:    
+    self._return = 'done' # 'done'という結果を設定します
+else:        
+    self._return = 'failed' # 'failed'という結果を設定します
+
+return self._return # 'done'または'failed'という結果を返します
 ```
 
 > [!NOTE]
