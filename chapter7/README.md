@@ -85,6 +85,7 @@ ros2 launch flexbe_webui flexbe_full.launch.py
 ![check_bringme_action_behavior_sm](docs/check_bringme_action_behavior_sm.png)
 
 7. 最後に，FlexBe WebIUのRuntime Controlへ移動して，`listen_time`で聴音時間を設定して，`Start Execution`．
+
 ![exec_bringme_action_behavior_sm](docs/exec_bringme_action_behavior_sm.png)
 
 > [!NOTE]
