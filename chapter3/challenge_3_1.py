@@ -1,76 +1,105 @@
+from threading import Thread, Event
 import rclpy
-import rclpy.node
-from airobot_interfaces.srv import StringCommand
+from rclpy.action import ActionClient
+from rclpy.node import Node
+from action_msgs.msg import GoalStatus
+from airobot_interfaces.action import StringCommand
 
-from gtts import gTTS
-from subprocess import run, PIPE
+"""
+チャレンジ3.1の回答例
 
-import Levenshtein
+オウム返しのプログラムを改良
+【必要なプログラム】
+・challenge_3_1.py              speech_client.pyを一部変更
+・speech_recognition_server.py  変更なし
+・speech_synthesis_server.py    変更なし
 
-import os
-from time import sleep
-import speech_recognition as sr
-import pyaudio
-from io import BytesIO
-from mpg123 import Mpg123, Out123
+新たなプログラムはsetup.pyに追記が必要です。
+speech_client.pyをchallenge_3_1_1.pyに変更して、
+オウム返しと同じ順序でプログラムを起動してください
 
-class SpeechService(rclpy.node.Node):
+"""
+
+
+class StringCommandActionClient:
+    def __init__(self, node, name):
+        self.name = name
+        self.logger = node.get_logger()
+        self.action_client = ActionClient(node, StringCommand, name)
+        self.event = Event()
+
+    def send_goal(self, command: str):
+        self.logger.info(f'{self.name} アクションサーバ待機...')
+        self.action_client.wait_for_server()
+        goal_msg = StringCommand.Goal()
+        goal_msg.command = command
+        self.logger.info(f'{self.name} ゴール送信... command: \'{command}\'')
+        self.event.clear()
+        self.send_goal_future = self.action_client.send_goal_async(goal_msg)
+        self.send_goal_future.add_done_callback(self.goal_response_callback)
+        self.action_result = None
+        self.event.wait(20.0)
+        if self.action_result is None:
+            self.logger.info(f'{self.name} タイムアウト')
+            return None
+        else:
+            result = self.action_result.result
+            status = self.action_result.status
+            if status == GoalStatus.STATUS_SUCCEEDED:
+                self.logger.info(f'{self.name} 結果: {result.answer}')
+                self.goal_handle = None
+                return result.answer
+            else:
+                self.logger.info(f'{self.name} 失敗ステータス: {status}')
+                return None
+
+    def goal_response_callback(self, future):
+        goal_handle = future.result()
+        if not goal_handle.accepted:
+            self.logger.info(f'{self.name} ゴールは拒否されました')
+            return
+        self.goal_handle = goal_handle
+        self.logger.info(f'{self.name} ゴールは受け付けられました')
+        self.get_result_future = goal_handle.get_result_async()
+        self.get_result_future.add_done_callback(self.get_result_callback)
+
+    def get_result_callback(self, future):
+        self.action_result = future.result()
+        self.event.set()
+
+
+class SpeechClient(Node):
     def __init__(self):
-        super().__init__("speech_service")
+        super().__init__('speech_client')
+        self.get_logger().info('音声対話ノードを起動します．')
+        self.recognition_client = StringCommandActionClient(
+            self, 'speech_recognition/command')
+        self.synthesis_client = StringCommandActionClient(
+            self, 'speech_synthesis/command')
+        self.thread = Thread(target=self.run)
+        self.thread.start()
 
-        self.get_logger().info("音声サーバーを起動しました")
-
-        self.period = 5.0
-        self.init_rec = sr.Recognizer()
-
+        # 追加した変数
         self.objects = ['bottle', 'cup']
         self.places = ['kitchen', 'living']
 
-        self.service = self.create_service(StringCommand, '/speech_service/wake_up', self.command_callback)
+    # 関数の中を一部変更
+    def run(self):
+        self.running = True
+        while self.running:
+            self.synthesis_client.send_goal('I\'m ready.')
+            self.get_logger().info('I\'m ready.')
 
-        self.lang = 'en'
-        self.mp3 = Mpg123()
-        self.out = Out123()
+            text = None
+            while text is None:
+                text = self.recognition_client.send_goal('')
 
-    def command_callback(self, request, response):
+            target_object, target_palce = self.search_object_and_place(text)
 
-        self.synthesis('I\'m ready.')
-        self.get_logger().info('I\'m ready.')
+            self.synthesis_client.send_goal(f'I will go to the {target_palce} and grab a {target_object}')
+            self.get_logger().info(f'I will go to the {target_palce} and grab a {target_object}')
 
-        text = None
-        while text is None:
-            text = self.recognition()
-
-        target_object, target_palce = self.search_object_and_place(text)
-
-        self.synthesis(f'I will go to the {target_palce} and grab a {target_object}')
-        self.get_logger().info(f'I will go to the {target_palce} and grab a {target_object}')
-
-
-        if (target_object is not None) and (target_palce is not None):
-            response.answer = f'{target_palce},{target_object}'
-            return response
-        else:
-            response.answer = 'failed'
-            return response
-
-    def recognition(self):
-
-        with sr.Microphone() as source:
-            audio_data = self.init_rec.record(source, duration=5)
-            self.get_logger().info(f'音声認識を行います')
-
-            try:
-                text = self.init_rec.recognize_google(audio_data)
-                self.get_logger().info(text)
-
-            except sr.UnknownValueError:
-                pass
-
-        self.get_logger().info(f'認識したテキストは "{text}" です')
-
-        return text
-
+    # 追加した関数
     def search_object_and_place(self, text):
 
         self.get_logger().info(f'受けとったテキスト "{text}"')
@@ -88,29 +117,15 @@ class SpeechService(rclpy.node.Node):
 
         return target_object, target_place
 
-    def synthesis(self, text):
-
-        self.get_logger().info('音声合成')
-
-        tts = gTTS(text, lang=self.lang[:2])
-        fp = BytesIO()
-        tts.write_to_fp(fp)
-        fp.seek(0)
-        self.mp3.feed(fp.read())
-
-        for frame in self.mp3.iter_frames(self.out.start):
-            self.out.play(frame)
 
 
 def main():
     rclpy.init()
+    node = SpeechClient()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        node.running = False
+        pass
 
-    speech_service = SpeechService()
-
-    rclpy.spin(speech_service)
-    speech_service.destroy_node()
-
-    rclpy.shutdown()
-
-if __name__ == "__main__":
-    main()
+    rclpy.try_shutdown()

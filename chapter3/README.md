@@ -1,9 +1,9 @@
 # 3章の解答例
 
-- このフォルダの```.py```ファイルを，```~/airobot_ws/src/chapter3/speech_service/speech_service```にコピーする．
-- ```~/airobot_ws/src/chapter3/speech_service/setup.py```の```entry_points```の設定のリストに以下の行を追加する．
+- このフォルダの```.py```ファイルを，```~/airobot_ws/src/chapter3/speech_action/speech_action```にコピーする．
+- ```~/airobot_ws/src/chapter3/speech_action/setup.py```の```entry_points```の設定のリストに以下の行を追加する．
 ```
-            'challenge_3_1 = speech_service.challenge_3_1:main',
+            'challenge_3_1 = speech_action.challenge_3_1:main',
 ```
 
 - 端末で以下を実行
@@ -12,11 +12,16 @@ cd ~/airobot_ws
 source install/setup.bash
 ```
 
-- 以下のコマンドで```challenge_3_1```を立ち上げます．
+- まず,2つの端末を開いて,それぞれの端末で音声認識サーバと音声合成サーバを起動します.
 ```
-ros2 run speech_service challenge_3_1
+ros2 run speech_action speech_recognition_server
 ```
-- そのあとに，別の端末を立ち上げて，challenge_3_1を動かすためのコマンドを実行します．
 ```
-ros2 service call /speech_service/wake_up airobot_interfaces/srv/StringCommand
+ros2 run speech_action speech_synthesis_server
 ```
+
+- その後，以下のコマンドで```challenge_3_1```を立ち上げます．
+```
+ros2 run speech_action challenge_3_1
+```
+
