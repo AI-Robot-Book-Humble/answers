@@ -64,7 +64,7 @@ return self._return # 'done'または'failed'という結果を返します
 ```bash
 cd ~/ai_robot_ws
 colcon build
-sourcce install/setup.bash
+source install/setup.bash
 ``` 
 
 4. また，音声認識とその他の疑似ノードを立ち上げます．
