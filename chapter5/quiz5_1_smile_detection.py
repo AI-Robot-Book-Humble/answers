@@ -1,6 +1,6 @@
 # Quiz 5.1 Smile Detection
 # 
-# Copyright (c) 2022, TAN Jeffrey Too Chuan (ai-robot-book@googlegroups.com)
+# Copyright (c) 2022-2025, TAN Jeffrey Too Chuan (ai-robot-book@googlegroups.com)
 # All rights reserved.
 # This source code is licensed under the Apache License 2.0 found in the LICENSE file in the root directory of this project.
 
