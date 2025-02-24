@@ -1,6 +1,6 @@
 from setuptools import find_packages, setup
 
-package_name = 'time_topic'
+package_name = 'fizzbuzz_pub_sub'
 
 setup(
     name=package_name,
@@ -20,8 +20,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'time_publisher_node  = time_topic.time_publisher_node:main',
-            'time_subscriber_node = time_topic.time_subscriber_node:main'
+            'fizzbuzz_pub_sub_node = fizzbuzz_pub_sub.fizzbuzz_pub_sub_node:main'
         ],
     },
 )
